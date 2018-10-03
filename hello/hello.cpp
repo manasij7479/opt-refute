@@ -1,7 +1,9 @@
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/Analysis/LazyValueInfo.h"
+#include "llvm/Analysis/Passes.h"
 #include "llvm/Pass.h"
 #include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/ConstantRange.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/KnownBits.h"
@@ -65,30 +67,24 @@ private:
         llvm::errs() << "\n";
       }
 
+      for (auto&& F : M.getFunctionList()) {
 
-    for (auto&& F : M.getFunctionList()) {
+        auto NewF = InstantiateRHS(&F, v, LHS->arg_size());
 
-      auto NewF = InstantiateRHS(&F, v, LHS->arg_size());
-
-      if (IsRHSInfeasibleCKB(C, NewF, M)) {
-        refuted.insert(&F);
-        llvm::outs() << "ckb " << F.getName() << "\n";
+        if (IsRHSInfeasibleCKB(C, NewF, M)) {
+          refuted.insert(&F);
+          llvm::outs() << "ckb " << F.getName() << "\n";
+        }
+        else if (IsRHSInfeasibleLVI(C, NewF, M)) {
+          refuted.insert(&F);
+          llvm::outs() << "lvi " << F.getName() << "\n";
+        }
+        else {
+          llvm::outs() << "    " << F.getName() << "\n";
+        }
+        NewF->removeFromParent();
       }
-      // else if (IsRHSInfeasibleLVI(&F, M)) {
-      //   refuted.insert(&F);
-      //   llvm::outs() << "lvi " << F->getName() << "\n";
-      // }
-      else {
-        llvm::outs() << "    " << F.getName() << "\n";
-      }
-      NewF->removeFromParent();
     }
-
-
-    }
-
-
-
   }
 
   // bool IsRHSInfeasibleLVI(std::vector<llvm::Constant *> LHSValues,
@@ -125,19 +121,47 @@ private:
   bool IsRHSInfeasibleCKB(llvm::Constant *LHS,
                           llvm::Function *RHS,
                           llvm::Module &M) {
-    int ConstantIntValue;
+    llvm::APInt C;
     if (ConstantInt* CI = dyn_cast<ConstantInt>(LHS)) {
-      if (CI->getBitWidth() <= 32) {
-        ConstantIntValue = CI->getSExtValue();
-      }
+      C = CI->getValue();
+    } else {
+      return false;
     }
     for (auto &BB : *RHS) {
       for (auto &I : BB) {
         if (I.getOpcode() == Instruction::Ret) {
           KnownBits Known = computeKnownBits(I.getOperand(0), M.getDataLayout());
-          if ((Known.Zero & ConstantIntValue) != 0 || (Known.One & ~ConstantIntValue) != 0) {
+          if ((Known.Zero & C) != 0 || (Known.One & ~C) != 0) {
             return true;
           }
+        }
+      }
+    }
+    return false;
+  }
+
+  bool IsRHSInfeasibleLVI(llvm::Constant *LHS,
+                          llvm::Function *RHS,
+                          llvm::Module &M) {
+    llvm::APInt C;
+    if (ConstantInt* CI = dyn_cast<ConstantInt>(LHS)) {
+      C = CI->getValue();
+    } else {
+      return false;
+    }
+
+    auto FP = createLazyValueInfoPass();
+    // FP->runOnFunction(RHS);
+
+    for (auto &BB : *RHS) {
+      for (auto &I : BB) {
+        if (I.getOpcode() == Instruction::Ret) {
+          // llvm::outs() << "foo\n";
+          // llvm::ConstantRange Range = LVI.getConstantRange(I.getOperand(0), &BB);
+          // Range.print(llvm::outs());
+          // if (!Range.contains(C)) {
+          //   return true;
+          // }
         }
       }
     }
