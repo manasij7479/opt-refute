@@ -116,28 +116,28 @@ private:
           }
         }
       }
-      llvm::outs() << ":( " << RHS->getName() << "\n";
+      llvm::outs() << "   " << RHS->getName() << "\n";
       NewF->removeFromParent();
     }
     return false;
   }
 
-  void GenerateLHSConsts(int num_args, llvm::Module &M) {
-    auto&& zero = llvm::ConstantInt::get(M.getContext(), llvm::APInt(32, 0, false));
-    llvm::SmallVector<llvm::Constant *, 2> args = {zero, zero};
-    LHSConsts.push_back(args);
+  void GenerateLHSConsts(int num_args, llvm::Module &M, int num_sets = 4) {
+    std::vector<llvm::Constant *> argstore = {
+    llvm::ConstantInt::get(M.getContext(), llvm::APInt(32, 0, false)),
+    llvm::ConstantInt::get(M.getContext(), llvm::APInt(32, -1, false)),
+    llvm::ConstantInt::get(M.getContext(), llvm::APInt(32, 7479, false)),
+    llvm::ConstantInt::get(M.getContext(), llvm::APInt(32, 42, false))};
 
-    auto&& wut = llvm::ConstantInt::get(M.getContext(), llvm::APInt(32, 7479, false));
-    args = {wut, zero};
-    LHSConsts.push_back(args);
+    llvm::SmallVector<llvm::Constant *, 2> args;
 
-    wut = llvm::ConstantInt::get(M.getContext(), llvm::APInt(32, 45, false));
-    args = {wut, zero};
-    LHSConsts.push_back(args);
-
-    wut = llvm::ConstantInt::get(M.getContext(), llvm::APInt(32, -1, false));
-    args = {wut, zero};
-    LHSConsts.push_back(args);
+    for (int i = 0; i < num_sets; ++i) {
+      args.clear();
+      for (int j = 0; j < num_args; ++j) {
+        args.push_back(argstore[(4*j + 5*i) % argstore.size()]);
+      }
+      LHSConsts.push_back(args);
+    }
   }
 
   std::vector<llvm::SmallVector<llvm::Constant *, 2>> LHSConsts;
